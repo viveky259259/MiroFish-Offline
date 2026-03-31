@@ -25,9 +25,9 @@ The [original MiroFish](https://github.com/666ghj/MiroFish) was built for the Ch
 |---|---|
 | Chinese UI | **English UI** (1,000+ strings translated) |
 | Zep Cloud (graph memory) | **Neo4j Community Edition 5.15** |
-| DashScope / OpenAI API (LLM) | **Ollama** (qwen2.5, llama3, etc.) |
-| Zep Cloud embeddings | **nomic-embed-text** via Ollama |
-| Cloud API keys required | **Zero cloud dependencies** |
+| DashScope / OpenAI API (LLM) | **Groq cloud** (qwen-2.5-32b) or any OpenAI-compatible API |
+| Zep Cloud embeddings | **nomic-embed-text** via local Ollama |
+| Cloud API keys required | **Free Groq API key + local Ollama for embeddings** |
 
 ## Workflow
 
@@ -48,7 +48,8 @@ The [original MiroFish](https://github.com/666ghj/MiroFish) was built for the Ch
 ### Prerequisites
 
 - Docker & Docker Compose (recommended), **or**
-- Python 3.11+, Node.js 18+, Neo4j 5.15+, Ollama
+- Python 3.11+, Node.js 18+, Neo4j 5.15+, Ollama (for embeddings)
+- A free Groq API key from [console.groq.com](https://console.groq.com)
 
 ### Option A: Docker (easiest)
 
@@ -56,12 +57,12 @@ The [original MiroFish](https://github.com/666ghj/MiroFish) was built for the Ch
 git clone https://github.com/nikmcfly/MiroFish-Offline.git
 cd MiroFish-Offline
 cp .env.example .env
+# Edit .env — add your Groq API key
 
 # Start all services (Neo4j, Ollama, MiroFish)
 docker compose up -d
 
-# Pull the required models into Ollama
-docker exec mirofish-ollama ollama pull qwen2.5:32b
+# Pull the embedding model into Ollama
 docker exec mirofish-ollama ollama pull nomic-embed-text
 ```
 
@@ -78,19 +79,18 @@ docker run -d --name neo4j \
   neo4j:5.15-community
 ```
 
-**2. Start Ollama & pull models**
+**2. Start Ollama & pull embedding model**
 
 ```bash
 ollama serve &
-ollama pull qwen2.5:32b      # LLM (or qwen2.5:14b for less VRAM)
-ollama pull nomic-embed-text  # Embeddings (768d)
+ollama pull nomic-embed-text  # Embeddings (768d, ~274MB)
 ```
 
 **3. Configure & run backend**
 
 ```bash
 cp .env.example .env
-# Edit .env if your Neo4j/Ollama are on non-default ports
+# Edit .env — add your Groq API key (get one at https://console.groq.com/keys)
 
 cd backend
 pip install -r requirements.txt
@@ -112,22 +112,22 @@ Open `http://localhost:3000`.
 All settings are in `.env` (copy from `.env.example`):
 
 ```bash
-# LLM — points to local Ollama (OpenAI-compatible API)
-LLM_API_KEY=ollama
-LLM_BASE_URL=http://localhost:11434/v1
-LLM_MODEL_NAME=qwen2.5:32b
+# LLM — Groq cloud (OpenAI-compatible API)
+LLM_API_KEY=gsk_your_groq_api_key_here
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_MODEL_NAME=qwen-2.5-32b
 
 # Neo4j
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=mirofish
 
-# Embeddings
+# Embeddings — local Ollama
 EMBEDDING_MODEL=nomic-embed-text
 EMBEDDING_BASE_URL=http://localhost:11434
 ```
 
-Works with any OpenAI-compatible API — swap Ollama for Claude, GPT, or any other provider by changing `LLM_BASE_URL` and `LLM_API_KEY`.
+Works with any OpenAI-compatible API — swap Groq for Ollama, Claude, GPT, or any other provider by changing `LLM_BASE_URL` and `LLM_API_KEY`.
 
 ## Architecture
 
@@ -176,12 +176,11 @@ This fork introduces a clean abstraction layer between the application and the g
 
 | Component | Minimum | Recommended |
 |---|---|---|
-| RAM | 16 GB | 32 GB |
-| VRAM (GPU) | 10 GB (14b model) | 24 GB (32b model) |
-| Disk | 20 GB | 50 GB |
+| RAM | 8 GB | 16 GB |
+| Disk | 5 GB | 20 GB |
 | CPU | 4 cores | 8+ cores |
 
-CPU-only mode works but is significantly slower for LLM inference. For lighter setups, use `qwen2.5:14b` or `qwen2.5:7b`.
+LLM inference runs on Groq cloud — no local GPU required. Only the embedding model (nomic-embed-text, ~274MB) runs locally via Ollama.
 
 ## Use Cases
 
@@ -199,7 +198,7 @@ AGPL-3.0 — same as the original MiroFish project. See [LICENSE](./LICENSE).
 This is a modified fork of [MiroFish](https://github.com/666ghj/MiroFish) by [666ghj](https://github.com/666ghj), originally supported by [Shanda Group](https://www.shanda.com/). The simulation engine is powered by [OASIS](https://github.com/camel-ai/oasis) from the CAMEL-AI team.
 
 **Modifications in this fork:**
-- Backend migrated from Zep Cloud to local Neo4j CE 5.15 + Ollama
+- Backend migrated from Zep Cloud to Neo4j CE 5.15 + Groq cloud (LLM) + local Ollama (embeddings)
 - Entire frontend translated from Chinese to English (20 files, 1,000+ strings)
 - All Zep references replaced with Neo4j across the UI
 - Rebranded to MiroFish Offline

@@ -433,17 +433,15 @@ class RedditSimulationRunner:
     
     def _create_model(self):
         """
-        Create LLM model
-        
-        Unified use of configuration in project root .env file (highest priority)：
-        - LLM_API_KEY: API key
-        - LLM_BASE_URL: API base URL
-        - LLM_MODEL_NAME: Model name
+        Create LLM model for simulation agents.
+
+        Uses SIM_LLM_* env vars (local Ollama) for bulk simulation calls,
+        falling back to LLM_* (Groq) if not set.
         """
-        # Read configuration from .env first
-        llm_api_key = os.environ.get("LLM_API_KEY", "")
-        llm_base_url = os.environ.get("LLM_BASE_URL", "")
-        llm_model = os.environ.get("LLM_MODEL_NAME", "")
+        # Prefer SIM_LLM_* (local model for bulk simulation), fall back to LLM_*
+        llm_api_key = os.environ.get("SIM_LLM_API_KEY") or os.environ.get("LLM_API_KEY", "")
+        llm_base_url = os.environ.get("SIM_LLM_BASE_URL") or os.environ.get("LLM_BASE_URL", "")
+        llm_model = os.environ.get("SIM_LLM_MODEL_NAME") or os.environ.get("LLM_MODEL_NAME", "")
         
         # If not in .env, use config as fallback
         if not llm_model:

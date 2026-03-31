@@ -27,10 +27,15 @@ class Config:
     # JSON configuration - disable ASCII escaping to display Chinese directly (not as \uXXXX)
     JSON_AS_ASCII = False
 
-    # LLM configuration (unified OpenAI format)
+    # LLM configuration — Groq cloud for smart tasks (reports, NER, graph)
     LLM_API_KEY = os.environ.get('LLM_API_KEY')
-    LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'http://localhost:11434/v1')
-    LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'qwen2.5:32b')
+    LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://api.groq.com/openai/v1')
+    LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'qwen/qwen3-32b')
+
+    # Simulation LLM — local Ollama for bulk agent calls
+    SIM_LLM_API_KEY = os.environ.get('SIM_LLM_API_KEY', 'ollama')
+    SIM_LLM_BASE_URL = os.environ.get('SIM_LLM_BASE_URL', 'http://localhost:11434/v1')
+    SIM_LLM_MODEL_NAME = os.environ.get('SIM_LLM_MODEL_NAME', 'qwen3.5:2b')
 
     # Neo4j configuration
     NEO4J_URI = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')

@@ -289,25 +289,53 @@
 
           <!-- Chat Input -->
           <div class="chat-input-area">
-            <textarea 
-              v-model="chatInput"
-              class="chat-input"
-              placeholder="Type your question..."
-              @keydown.enter.exact.prevent="sendMessage"
-              :disabled="isSending || (!selectedAgent && chatTarget === 'agent')"
-              rows="1"
-              ref="chatInputRef"
-            ></textarea>
-            <button 
-              class="send-btn"
-              @click="sendMessage"
-              :disabled="!chatInput.trim() || isSending || (!selectedAgent && chatTarget === 'agent')"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            <div v-if="attachedFile" class="attached-file">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
               </svg>
-            </button>
+              <span class="attached-file-name">{{ attachedFile.name }}</span>
+              <button class="attached-file-remove" @click="removeAttachment">&times;</button>
+            </div>
+            <div class="chat-input-row">
+              <input
+                type="file"
+                ref="fileInputRef"
+                accept=".md,.markdown,.txt"
+                style="display: none"
+                @change="handleFileAttach"
+              />
+              <button
+                v-if="chatTarget === 'report_agent'"
+                class="attach-btn"
+                @click="fileInputRef?.click()"
+                :disabled="isSending"
+                title="Attach .md file"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                </svg>
+              </button>
+              <textarea
+                v-model="chatInput"
+                class="chat-input"
+                :placeholder="attachedFile ? 'Add a message about the attached file...' : 'Type your question...'"
+                @keydown.enter.exact.prevent="sendMessage"
+                :disabled="isSending || (!selectedAgent && chatTarget === 'agent')"
+                rows="1"
+                ref="chatInputRef"
+              ></textarea>
+              <button
+                class="send-btn"
+                @click="sendMessage"
+                :disabled="(!chatInput.trim() && !attachedFile) || isSending || (!selectedAgent && chatTarget === 'agent')"
+                >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -438,6 +466,8 @@ const chatHistoryCache = ref({}) // Cache all chat history: { 'report_agent': []
 const isSending = ref(false)
 const chatMessages = ref(null)
 const chatInputRef = ref(null)
+const attachedFile = ref(null) // { name, content } for .md attachment
+const fileInputRef = ref(null)
 
 // Survey State
 const selectedAgents = ref(new Set())
@@ -638,17 +668,50 @@ const renderMarkdown = (content) => {
   return html
 }
 
+// File attachment methods
+const handleFileAttach = (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    attachedFile.value = {
+      name: file.name,
+      content: e.target.result
+    }
+    addLog(`Attached file: ${file.name}`)
+  }
+  reader.readAsText(file)
+  // Reset input so the same file can be re-selected
+  event.target.value = ''
+}
+
+const removeAttachment = () => {
+  attachedFile.value = null
+}
+
 // Chat Methods
 const sendMessage = async () => {
-  if (!chatInput.value.trim() || isSending.value) return
-  
-  const message = chatInput.value.trim()
+  if ((!chatInput.value.trim() && !attachedFile.value) || isSending.value) return
+
+  let message = chatInput.value.trim()
+  let displayMessage = message
   chatInput.value = ''
-  
+
+  // If file is attached, prepend its content to the message
+  if (attachedFile.value) {
+    const fileContext = `[Attached: ${attachedFile.value.name}]\n\n${attachedFile.value.content}`
+    displayMessage = attachedFile.value.name + (message ? ` — ${message}` : '')
+    message = message
+      ? `${fileContext}\n\n---\n\nUser question: ${message}`
+      : `Please analyze the following document:\n\n${fileContext}`
+    attachedFile.value = null
+  }
+
   // Add user message
   chatHistory.value.push({
     role: 'user',
-    content: message,
+    content: displayMessage,
     timestamp: new Date().toISOString()
   })
   
@@ -695,9 +758,12 @@ const sendToReportAgent = async (message) => {
   })
 
   if (res.success && res.data) {
+    // API returns {data: {response: {response: "...", sources: [], tool_calls: []}}}
+    const reply = res.data.response
+    const content = typeof reply === 'string' ? reply : (reply?.response || res.data.answer || 'No response')
     chatHistory.value.push({
       role: 'assistant',
-      content: res.data.response || res.data.answer || 'No response',
+      content: content,
       timestamp: new Date().toISOString()
     })
     addLog('Report Agent replied')
@@ -2096,8 +2162,72 @@ watch(() => props.simulationId, (newId) => {
   padding: 16px 24px;
   border-top: 1px solid #E5E7EB;
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 8px;
   align-items: flex-end;
+}
+
+.attach-btn {
+  width: 44px;
+  height: 44px;
+  background: #F3F4F6;
+  color: #6B7280;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.attach-btn:hover:not(:disabled) {
+  background: #E5E7EB;
+  color: #1F2937;
+}
+
+.attach-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.attached-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #1E40AF;
+}
+
+.attached-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attached-file-remove {
+  background: none;
+  border: none;
+  color: #6B7280;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.attached-file-remove:hover {
+  color: #EF4444;
 }
 
 .chat-input {
