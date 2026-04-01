@@ -1,14 +1,13 @@
 """
-EmbeddingService — local embedding via Ollama API
+EmbeddingService — cloud embedding via Jina AI API
 
-Replaces Zep Cloud's built-in embedding with local nomic-embed-text model.
-Uses Ollama's /api/embed endpoint for vector generation (768 dimensions).
+Uses Jina AI's /v1/embeddings endpoint for vector generation (768 dimensions).
+Free tier: 1M tokens/month at https://jina.ai
 """
 
 import time
 import logging
 from typing import List, Optional
-from functools import lru_cache
 
 import requests
 
@@ -18,20 +17,20 @@ logger = logging.getLogger('mirofish.embedding')
 
 
 class EmbeddingService:
-    """Generate embeddings using local Ollama server."""
+    """Generate embeddings using Jina AI cloud API."""
 
     def __init__(
         self,
         model: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
         max_retries: int = 3,
         timeout: int = 30,
     ):
         self.model = model or Config.EMBEDDING_MODEL
-        self.base_url = (base_url or Config.EMBEDDING_BASE_URL).rstrip('/')
+        self.api_key = api_key or Config.EMBEDDING_API_KEY
         self.max_retries = max_retries
         self.timeout = timeout
-        self._embed_url = f"{self.base_url}/api/embed"
+        self._embed_url = "https://api.jina.ai/v1/embeddings"
 
         # Simple in-memory cache (text -> embedding vector)
         # Using dict instead of lru_cache because lists aren't hashable
@@ -117,10 +116,10 @@ class EmbeddingService:
 
     def _request_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Make HTTP request to Ollama /api/embed endpoint with retry.
+        Make HTTP request to Jina AI /v1/embeddings endpoint with retry.
 
         Args:
-            texts: List of texts to embed (Ollama supports batch in single request)
+            texts: List of texts to embed
 
         Returns:
             List of embedding vectors
@@ -129,6 +128,10 @@ class EmbeddingService:
             "model": self.model,
             "input": texts,
         }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
 
         last_error = None
         for attempt in range(self.max_retries):
@@ -136,12 +139,13 @@ class EmbeddingService:
                 response = requests.post(
                     self._embed_url,
                     json=payload,
+                    headers=headers,
                     timeout=self.timeout,
                 )
                 response.raise_for_status()
                 data = response.json()
 
-                embeddings = data.get("embeddings", [])
+                embeddings = [item["embedding"] for item in data["data"]]
                 if len(embeddings) != len(texts):
                     raise EmbeddingError(
                         f"Expected {len(texts)} embeddings, got {len(embeddings)}"
@@ -152,24 +156,22 @@ class EmbeddingService:
             except requests.exceptions.ConnectionError as e:
                 last_error = e
                 logger.warning(
-                    f"Ollama connection failed (attempt {attempt + 1}/{self.max_retries}): {e}"
+                    f"Jina AI connection failed (attempt {attempt + 1}/{self.max_retries}): {e}"
                 )
             except requests.exceptions.Timeout as e:
                 last_error = e
                 logger.warning(
-                    f"Ollama request timed out (attempt {attempt + 1}/{self.max_retries})"
+                    f"Jina AI request timed out (attempt {attempt + 1}/{self.max_retries})"
                 )
             except requests.exceptions.HTTPError as e:
                 last_error = e
-                logger.error(f"Ollama HTTP error: {e.response.status_code} - {e.response.text}")
+                logger.error(f"Jina AI HTTP error: {e.response.status_code} - {e.response.text}")
                 if e.response.status_code >= 500:
-                    # Server error — retry
-                    pass
+                    pass  # Server error — retry
                 else:
-                    # Client error (4xx) — don't retry
-                    raise EmbeddingError(f"Ollama embedding failed: {e}") from e
+                    raise EmbeddingError(f"Jina AI embedding failed: {e}") from e
             except (KeyError, ValueError) as e:
-                raise EmbeddingError(f"Invalid Ollama response: {e}") from e
+                raise EmbeddingError(f"Invalid Jina AI response: {e}") from e
 
             # Exponential backoff
             if attempt < self.max_retries - 1:
@@ -178,7 +180,7 @@ class EmbeddingService:
                 time.sleep(wait)
 
         raise EmbeddingError(
-            f"Ollama embedding failed after {self.max_retries} retries: {last_error}"
+            f"Jina AI embedding failed after {self.max_retries} retries: {last_error}"
         )
 
     def _cache_put(self, text: str, vector: List[float]) -> None:
@@ -191,7 +193,7 @@ class EmbeddingService:
         self._cache[text] = vector
 
     def health_check(self) -> bool:
-        """Check if Ollama embedding endpoint is reachable."""
+        """Check if Jina AI embedding endpoint is reachable."""
         try:
             vec = self.embed("health check")
             return len(vec) > 0
