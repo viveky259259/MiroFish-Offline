@@ -165,9 +165,11 @@ try:
         ActionType,
         LLMAction,
         ManualAction,
+        Platform,
         generate_twitter_agent_graph,
         generate_reddit_agent_graph
     )
+    from oasis.social_platform.channel import Channel
 except ImportError as e:
     print(f"Error: Missing dependency {e}")
     print("Please install first: pip install oasis-ai camel-ai")
@@ -1151,11 +1153,20 @@ async def run_twitter_simulation(
     db_path = os.path.join(simulation_dir, "twitter_simulation.db")
     if os.path.exists(db_path):
         os.remove(db_path)
-    
+
+    # Use "random" recsys to avoid downloading Twitter/twhin-bert-base from HuggingFace
+    _twitter_channel = Channel()
+    _twitter_platform = Platform(
+        db_path=db_path,
+        channel=_twitter_channel,
+        recsys_type="random",
+        refresh_rec_post_count=2,
+        max_rec_post_len=2,
+        following_post_count=3,
+    )
     result.env = oasis.make(
         agent_graph=result.agent_graph,
-        platform=oasis.DefaultPlatformType.TWITTER,
-        database_path=db_path,
+        platform=_twitter_platform,
         semaphore=30,  # Limit maximum concurrent LLM requests to prevent API overload
     )
     
@@ -1342,11 +1353,21 @@ async def run_reddit_simulation(
     db_path = os.path.join(simulation_dir, "reddit_simulation.db")
     if os.path.exists(db_path):
         os.remove(db_path)
-    
+
+    # Use "random" recsys to avoid downloading heavyweight models from HuggingFace
+    _reddit_channel = Channel()
+    _reddit_platform = Platform(
+        db_path=db_path,
+        channel=_reddit_channel,
+        recsys_type="random",
+        allow_self_rating=True,
+        show_score=True,
+        max_rec_post_len=100,
+        refresh_rec_post_count=5,
+    )
     result.env = oasis.make(
         agent_graph=result.agent_graph,
-        platform=oasis.DefaultPlatformType.REDDIT,
-        database_path=db_path,
+        platform=_reddit_platform,
         semaphore=30,  # Limit maximum concurrent LLM requests to prevent API overload
     )
     

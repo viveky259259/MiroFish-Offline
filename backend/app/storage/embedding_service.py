@@ -7,6 +7,7 @@ Free tier: 1M tokens/month at https://jina.ai
 
 import time
 import logging
+import threading
 from typing import List, Optional
 
 import requests
@@ -14,6 +15,9 @@ import requests
 from ..config import Config
 
 logger = logging.getLogger('mirofish.embedding')
+
+# Global semaphore — Jina AI free tier allows max 2 concurrent requests
+_jina_semaphore = threading.Semaphore(2)
 
 
 class EmbeddingService:
@@ -136,12 +140,13 @@ class EmbeddingService:
         last_error = None
         for attempt in range(self.max_retries):
             try:
-                response = requests.post(
-                    self._embed_url,
-                    json=payload,
-                    headers=headers,
-                    timeout=self.timeout,
-                )
+                with _jina_semaphore:
+                    response = requests.post(
+                        self._embed_url,
+                        json=payload,
+                        headers=headers,
+                        timeout=self.timeout,
+                    )
                 response.raise_for_status()
                 data = response.json()
 

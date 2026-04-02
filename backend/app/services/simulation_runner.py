@@ -1551,7 +1551,7 @@ class SimulationRunner:
         simulation_id: str,
         prompt: str,
         platform: str = None,
-        timeout: float = 180.0
+        timeout: float = 600.0
     ) -> Dict[str, Any]:
         """
         Interview all Agents (global interview)

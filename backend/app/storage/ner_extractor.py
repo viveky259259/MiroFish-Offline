@@ -14,19 +14,21 @@ from ..utils.llm_client import LLMClient
 logger = logging.getLogger('mirofish.ner_extractor')
 
 # System prompt template for NER/RE extraction
-_SYSTEM_PROMPT = """You are a Named Entity Recognition and Relation Extraction system.
-Given a text and an ontology (entity types + relation types), extract all entities and relations.
+_SYSTEM_PROMPT = """You are a Named Entity Recognition, Relation Extraction, and Entity Synthesis system.
+Given a text and an ontology (entity types + relation types), your job is to populate the graph with realistic, named entities — even when the text only mentions roles or organizations conceptually.
 
 ONTOLOGY:
 {ontology_description}
 
 RULES:
-1. Only extract entity types and relation types defined in the ontology.
+1. Only use entity types and relation types defined in the ontology.
 2. Normalize entity names: strip whitespace, use canonical form (e.g., "Jack Ma" not "ma jack").
 3. Each entity must have: name, type (from ontology), and optional attributes.
 4. Each relation must have: source entity name, target entity name, type (from ontology), and a fact sentence describing the relationship.
-5. If no entities or relations are found, return empty lists.
-6. Be precise — only extract what is explicitly stated or strongly implied in the text.
+5. SYNTHESIS RULE: If the text references a role, profession, or organization type that matches an ontology entity type — but does not name a specific individual — synthesize 1–3 realistic, plausible named entities for that type. Use realistic names consistent with the domain (e.g., for "AI scientist at DeepMind", synthesize "Dr. Sarah Chen" with type AIScientist). These should feel like real professionals, not placeholders.
+6. ORGANIZATION RULE: Always extract or synthesize any companies, labs, or organizations mentioned or implied. If the text mentions working with teams at specific companies, create those organization entities.
+7. RELATION RULE: Create relations between synthesized and extracted entities wherever logically implied by the text (e.g., a synthesized AIScientist WORKS_FOR a mentioned organization).
+8. Aim for a rich graph: prefer extracting/synthesizing more entities over fewer when the text supports it.
 
 Return ONLY valid JSON in this exact format:
 {{
