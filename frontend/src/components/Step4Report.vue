@@ -127,14 +127,28 @@
             </div>
           </div>
 
-          <!-- Next Step Button - Show after completion -->
-          <button v-if="isComplete" class="next-step-btn" @click="goToInteraction">
-            <span>Enter Deep Interaction</span>
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-              <polyline points="12 5 19 12 12 19"></polyline>
-            </svg>
-          </button>
+          <!-- Action Buttons - Show after completion -->
+          <div v-if="isComplete" class="completion-actions">
+            <button class="next-step-btn" @click="goToInteraction">
+              <span>Enter Deep Interaction</span>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </button>
+            <button class="export-pdf-btn" :class="{ 'exporting': isExporting }" @click="handleExportPdf" :disabled="isExporting">
+              <svg v-if="!isExporting" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="12" y1="18" x2="12" y2="12"></line>
+                <polyline points="9 15 12 18 15 15"></polyline>
+              </svg>
+              <svg v-else class="spin-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+              </svg>
+              <span>{{ isExporting ? 'Preparing…' : 'Export PDF' }}</span>
+            </button>
+          </div>
 
           <div class="workflow-divider"></div>
         </div>
@@ -393,6 +407,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, h, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { getAgentLog, getConsoleLog } from '../api/report'
+import { exportReportPdf } from '../utils/exportPdf'
 
 const router = useRouter()
 
@@ -408,6 +423,26 @@ const emit = defineEmits(['add-log', 'update-status'])
 const goToInteraction = () => {
   if (props.reportId) {
     router.push({ name: 'Interaction', params: { reportId: props.reportId } })
+  }
+}
+
+const handleExportPdf = async () => {
+  if (isExporting.value) return
+  isExporting.value = true
+  try {
+    await exportReportPdf({
+      reportId: props.reportId,
+      simulationId: props.simulationId,
+      reportOutline: reportOutline.value,
+      generatedSections: generatedSections.value,
+      agentLogs: agentLogs.value,
+      totalToolCalls: totalToolCalls.value,
+    })
+  } catch (err) {
+    console.error('PDF export failed:', err)
+    alert('PDF export failed. Please try again.')
+  } finally {
+    isExporting.value = false
   }
 }
 
@@ -428,6 +463,7 @@ const leftPanel = ref(null)
 const rightPanel = ref(null)
 const logContent = ref(null)
 const showRawResult = reactive({})
+const isExporting = ref(false)
 
 // Toggle functions
 const toggleRawResult = (timestamp, event) => {
@@ -3397,13 +3433,19 @@ watch(() => props.reportId, (newId) => {
   font-size: 14px;
 }
 
+.completion-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 20px 0 20px;
+}
+
 .next-step-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: calc(100% - 40px);
-  margin: 4px 20px 0 20px;
+  width: 100%;
   padding: 14px 20px;
   font-size: 14px;
   font-weight: 600;
@@ -3425,6 +3467,46 @@ watch(() => props.reportId, (newId) => {
 
 .next-step-btn:hover svg {
   transform: translateX(4px);
+}
+
+.export-pdf-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.export-pdf-btn:hover:not(:disabled) {
+  background: #F3F4F6;
+  border-color: #D1D5DB;
+  color: #111827;
+}
+
+.export-pdf-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.export-pdf-btn.exporting {
+  color: #6B7280;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+  animation: spin 0.8s linear infinite;
 }
 
 /* Workflow Empty */
