@@ -526,6 +526,9 @@ const handleExportPdf = async () => {
       generatedSections: generatedSections.value,
       agentLogs: [],
       totalToolCalls: 0,
+      chatHistoryCache: chatHistoryCache.value,
+      surveyResults: surveyResults.value,
+      componentProfiles: profiles.value,
     })
   } catch (err) {
     console.error('PDF export failed:', err)

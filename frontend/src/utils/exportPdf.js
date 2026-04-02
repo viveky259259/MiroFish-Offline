@@ -143,6 +143,7 @@ function buildToc(sections) {
     ${items}
     <div class="toc-item toc-extra"><span class="toc-num">—</span><span class="toc-title">Agents Spawned</span></div>
     <div class="toc-item toc-extra"><span class="toc-num">—</span><span class="toc-title">Simulation Activity</span></div>
+    <div class="toc-item toc-extra"><span class="toc-num">—</span><span class="toc-title">Conversations</span></div>
     <div class="toc-item toc-extra"><span class="toc-num">—</span><span class="toc-title">AI Research Workflow</span></div>
   </div>
 </div>`
@@ -284,6 +285,105 @@ function buildPostsSection(posts) {
     ${renderPosts(redditPosts, 'Reddit')}
   </div>
 </div>`
+}
+
+function buildChatsSection(chatHistoryCache, surveyResults, componentProfiles) {
+  const hasChats = chatHistoryCache && Object.values(chatHistoryCache).some(h => h?.length > 0)
+  const hasSurvey = surveyResults?.length > 0
+  if (!hasChats && !hasSurvey) return ''
+
+  // Helper to get a display name for a chat key
+  const keyToName = (key) => {
+    if (key === 'report_agent') return { name: 'Report Agent', role: 'AI Research Assistant', isAgent: false }
+    const idx = parseInt(key.replace('agent_', ''))
+    const p = componentProfiles?.[idx]
+    return {
+      name: p?.name || p?.username || `Agent ${idx}`,
+      role: p?.profession || p?.type || '',
+      isAgent: true,
+    }
+  }
+
+  let html = `<div class="page chats-page">
+  <h2 class="section-heading">Conversations</h2>`
+
+  // ── Chat histories ──────────────────────────────────────────────────────
+  if (hasChats) {
+    const entries = Object.entries(chatHistoryCache).filter(([, msgs]) => msgs?.length > 0)
+
+    entries.forEach(([key, messages]) => {
+      const { name, role, isAgent } = keyToName(key)
+      const avatarColor = isAgent ? '#6366F1' : '#10B981'
+      const initial = name.charAt(0).toUpperCase()
+
+      html += `
+  <div class="chat-thread">
+    <div class="chat-thread-header">
+      <div class="chat-avatar" style="background:${avatarColor}20;color:${avatarColor}">${initial}</div>
+      <div>
+        <div class="chat-thread-name">${esc(name)}</div>
+        ${role ? `<div class="chat-thread-role">${esc(role)}</div>` : ''}
+      </div>
+      <div class="chat-msg-count">${messages.length} messages</div>
+    </div>
+    <div class="chat-messages-list">`
+
+      messages.forEach(msg => {
+        const isUser = msg.role === 'user'
+        const label = isUser ? 'You' : esc(name)
+        const bubbleClass = isUser ? 'bubble-user' : 'bubble-agent'
+        // Truncate very long messages (e.g. pasted markdown docs)
+        const content = esc(String(msg.content || ''))
+        html += `
+      <div class="chat-message ${bubbleClass}">
+        <span class="chat-msg-label">${label}</span>
+        <div class="chat-msg-body">${content}</div>
+      </div>`
+      })
+
+      html += `
+    </div>
+  </div>`
+    })
+  }
+
+  // ── Survey results ──────────────────────────────────────────────────────
+  if (hasSurvey) {
+    // Group by question (in case multiple surveys were run)
+    const grouped = {}
+    surveyResults.forEach(r => {
+      const q = r.question || 'Survey'
+      if (!grouped[q]) grouped[q] = []
+      grouped[q].push(r)
+    })
+
+    Object.entries(grouped).forEach(([question, results]) => {
+      html += `
+  <div class="survey-block">
+    <div class="survey-question-header">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+      Survey Question
+    </div>
+    <div class="survey-question">${esc(question)}</div>
+    <div class="survey-responses">`
+
+      results.forEach(r => {
+        html += `
+      <div class="survey-response">
+        <div class="survey-agent-name">${esc(r.agent_name || `Agent ${r.agent_id}`)}</div>
+        ${r.profession ? `<div class="survey-agent-role">${esc(r.profession)}</div>` : ''}
+        <p class="survey-answer">${esc(r.answer || 'No response')}</p>
+      </div>`
+      })
+
+      html += `
+    </div>
+  </div>`
+    })
+  }
+
+  html += `\n</div>`
+  return html
 }
 
 function buildWorkflowSection(agentLogs, totalToolCalls) {
@@ -769,6 +869,114 @@ function buildCss() {
       color: #6366f1;
     }
 
+    /* ── Chats ── */
+    .chats-page {}
+    .chat-thread {
+      margin: 20px 0 28px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+      break-inside: avoid;
+    }
+    .chat-thread-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .chat-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .chat-thread-name { font-size: 13px; font-weight: 700; color: #111827; }
+    .chat-thread-role { font-size: 11px; color: #6b7280; margin-top: 1px; }
+    .chat-msg-count {
+      margin-left: auto;
+      font-size: 11px;
+      color: #9ca3af;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .chat-messages-list {
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .chat-message { display: flex; flex-direction: column; gap: 3px; }
+    .chat-msg-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #9ca3af;
+    }
+    .bubble-user .chat-msg-label { color: #6366f1; }
+    .bubble-agent .chat-msg-label { color: #10b981; }
+    .chat-msg-body {
+      font-size: 12px;
+      color: #1f2937;
+      line-height: 1.6;
+      padding: 8px 12px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .bubble-user .chat-msg-body { background: #eef2ff; }
+    .bubble-agent .chat-msg-body { background: #f9fafb; border: 1px solid #e5e7eb; }
+
+    /* ── Survey ── */
+    .survey-block {
+      margin: 20px 0 28px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+      break-inside: avoid;
+    }
+    .survey-question-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 16px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: #9ca3af;
+      background: #f9fafb;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .survey-question {
+      padding: 10px 16px 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #111827;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .survey-responses {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+    }
+    .survey-response {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f3f4f6;
+      border-right: 1px solid #f3f4f6;
+    }
+    .survey-response:nth-child(even) { border-right: none; }
+    .survey-agent-name { font-size: 12px; font-weight: 700; color: #374151; }
+    .survey-agent-role { font-size: 11px; color: #9ca3af; margin-bottom: 5px; }
+    .survey-answer { font-size: 12px; color: #4b5563; line-height: 1.6; margin-top: 4px; }
+
     /* ── Page number footer ── */
     @page {
       size: A4;
@@ -790,6 +998,9 @@ export async function exportReportPdf({
   generatedSections,
   agentLogs,
   totalToolCalls,
+  chatHistoryCache,
+  surveyResults,
+  componentProfiles,
 }) {
   // ── 1. Fetch supplemental data ──────────────────────────────────────────
   let profiles = []
@@ -853,6 +1064,7 @@ export async function exportReportPdf({
     overviewPage,
     buildAgentsSection(profiles),
     buildPostsSection(posts),
+    buildChatsSection(chatHistoryCache, surveyResults, componentProfiles || profiles),
     buildWorkflowSection(agentLogs, totalToolCalls),
   ].filter(Boolean).join('\n')
 
